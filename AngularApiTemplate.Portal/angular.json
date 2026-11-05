@@ -35,6 +35,14 @@
             ]
           },
           "configurations": {
+            "local-entra": {
+              "fileReplacements": [
+                {
+                  "replace": "src/app/core/auth/auth.values.ts",
+                  "with": "src/app/core/auth/auth.values.local.ts"
+                }
+              ]
+            },
             "production": {
               "budgets": [
                 {
@@ -61,6 +69,9 @@
         "serve": {
           "builder": "@angular/build:dev-server",
           "configurations": {
+            "local-entra": {
+              "buildTarget": "angular-api-template-portal:build:development,local-entra"
+            },
             "production": {
               "buildTarget": "angular-api-template-portal:build:production"
             },

@@ -23,7 +23,7 @@
               type="button"
               class="danger"
               [disabled]="task.deletion.pending"
-              (click)="confirmingId.set(task.id)"
+              (click)="requestDelete(task.id)"
               [attr.aria-label]="'Delete task: ' + task.title"
             >
               <span aria-hidden="true">✕</span> Delete
@@ -33,19 +33,13 @@
           @if (task.description) {
             <p class="description">{{ task.description }}</p>
           }
-          @if (confirmingId() === task.id) {
-            <div class="confirmation" role="group" aria-label="Confirm deletion">
-              <p>Delete “{{ task.title }}”? This cannot be undone.</p>
-              <button type="button" class="danger" (click)="delete(task.id)">Confirm delete</button>
-              <button type="button" (click)="confirmingId.set(null)">Cancel</button>
-            </div>
-          }
-          @if (task.deletion.pending) {
-            <p role="status">Deleting task…</p>
-          }
-          @if (task.deletion.error; as error) {
-            <p class="error" role="alert">Delete failed: {{ error.message }} Try deleting again.</p>
-          }
+          <app-task-delete-confirmation
+            [taskTitle]="task.title"
+            [deletion]="task.deletion"
+            [confirming]="confirmingId() === task.id"
+            (confirmed)="delete(task.id)"
+            (cancelled)="cancelDelete()"
+          />
         </li>
       }
     </ul>

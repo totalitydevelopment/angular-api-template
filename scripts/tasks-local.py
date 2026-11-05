@@ -14,6 +14,7 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
+BACKEND = ROOT / "AngularApiTemplate.Api"
 CONTAINER = "angular-template-tasks-sql"
 IMAGE = "mcr.microsoft.com/mssql/server:2022-latest"
 DATABASE = "AngularApiTemplate_Tasks_Development"
@@ -40,7 +41,7 @@ def dotnet(arguments, environment):
     executable = shutil.which("dotnet")
     if not executable:
         raise RuntimeError("Install/select the .NET SDK as documented in README.")
-    return subprocess.run([executable, *arguments], cwd=ROOT, env=environment, check=True)
+    return subprocess.run([executable, *arguments], cwd=BACKEND, env=environment, check=True)
 
 
 def up():
@@ -108,7 +109,7 @@ def smoke(environment):
         process = subprocess.Popen([
             shutil.which("dotnet"), "run", "--no-build", "--project", "src/AngularApiTemplate.Api",
             "--launch-profile", "http",
-        ], cwd=ROOT, env=environment, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        ], cwd=BACKEND, env=environment, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         item_path = None
         try:
             deadline = time.monotonic() + 20
@@ -151,7 +152,7 @@ def smoke(environment):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["up", "migrate", "test", "run", "smoke", "stop"])
+    parser.add_argument("command", choices=["up", "migrate", "test", "run", "run-entra", "smoke", "stop"])
     command = parser.parse_args().command
     if command == "up":
         up()
@@ -164,7 +165,9 @@ def main():
                     "--startup-project", "src/AngularApiTemplate.Api"], environment)
         elif command == "test":
             dotnet(["test", "AngularApiTemplate.slnx"], environment)
-        elif command == "run":
+        elif command in ("run", "run-entra"):
+            if command == "run-entra":
+                environment["Entra__Enabled"] = "true"
             dotnet(["run", "--project", "src/AngularApiTemplate.Api", "--launch-profile", "http"], environment)
         else:
             smoke(environment)

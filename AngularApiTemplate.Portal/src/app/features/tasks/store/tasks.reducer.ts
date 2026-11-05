@@ -1,18 +1,23 @@
 import { createFeature, createReducer, on } from '@ngrx/store';
 
-import { ApiError } from '../models/api-error';
-import type {
-  CreateTaskResponse,
-  GetTaskResponse,
-  ListTasksResponse,
-} from '../models/task-contracts';
+import { ApiError, createApiError } from '../models/api-error';
+import type { GetTaskResponse, ListTasksResponse } from '../models/task-contracts';
 import { TasksActions } from './tasks.actions';
 
 export type RequestStatus = 'idle' | 'pending' | 'success' | 'failure';
+
 export interface DeleteOperation {
   readonly status: RequestStatus;
   readonly error: ApiError | null;
 }
+
+export function createDeleteOperation(
+  status: RequestStatus,
+  error: ApiError | null = null,
+): DeleteOperation {
+  return { status, error };
+}
+
 export interface TasksState {
   readonly listActive: boolean;
   readonly list: ListTasksResponse;
@@ -22,11 +27,14 @@ export interface TasksState {
   readonly detail: GetTaskResponse | null;
   readonly detailStatus: RequestStatus;
   readonly detailError: ApiError | null;
-  readonly created: CreateTaskResponse | null;
+  readonly detailEditing: boolean;
+  readonly updateStatus: RequestStatus;
+  readonly updateError: ApiError | null;
   readonly createStatus: RequestStatus;
   readonly createError: ApiError | null;
   readonly deletions: Readonly<Record<string, DeleteOperation>>;
 }
+
 export const initialTasksState: TasksState = {
   listActive: false,
   list: [],
@@ -36,11 +44,14 @@ export const initialTasksState: TasksState = {
   detail: null,
   detailStatus: 'idle',
   detailError: null,
-  created: null,
+  detailEditing: false,
+  updateStatus: 'idle',
+  updateError: null,
   createStatus: 'idle',
   createError: null,
   deletions: {},
 };
+
 // Pending mutations outlive pages. Settled errors belong only to visible task views.
 function retainedDeletions(
   deletions: TasksState['deletions'],
@@ -92,6 +103,9 @@ export const tasksFeature = createFeature({
       detail: null,
       detailStatus: 'pending',
       detailError: null,
+      detailEditing: false,
+      updateStatus: 'idle',
+      updateError: null,
     })),
     on(TasksActions.detailSucceeded, (state, { request, response }): TasksState =>
       state.detailId !== request.taskId
@@ -110,21 +124,52 @@ export const tasksFeature = createFeature({
       detail: null,
       detailStatus: 'idle',
       detailError: null,
+      detailEditing: false,
+      updateStatus: 'idle',
+      updateError: null,
     })),
+    on(TasksActions.editStarted, (state): TasksState =>
+      state.detail === null
+        ? state
+        : { ...state, detailEditing: true, updateStatus: 'idle', updateError: null },
+    ),
+    on(TasksActions.editCancelled, (state): TasksState =>
+      state.updateStatus === 'pending'
+        ? state
+        : { ...state, detailEditing: false, updateStatus: 'idle', updateError: null },
+    ),
+    on(TasksActions.updateRequested, (state, { request }): TasksState =>
+      state.detailId !== request.taskId
+        ? state
+        : { ...state, updateStatus: 'pending', updateError: null },
+    ),
+    on(TasksActions.updateSucceeded, (state, { request, response }): TasksState => ({
+      ...state,
+      list: state.list.map((task) => (task.id === response.id ? response : task)),
+      listStatus: 'idle',
+      listError: null,
+      detail: state.detailId === request.taskId ? response : state.detail,
+      detailEditing: state.detailId === request.taskId ? false : state.detailEditing,
+      updateStatus: state.detailId === request.taskId ? 'success' : state.updateStatus,
+      updateError: state.detailId === request.taskId ? null : state.updateError,
+    })),
+    on(TasksActions.updateFailed, (state, { request, error }): TasksState =>
+      state.detailId !== request.taskId
+        ? state
+        : { ...state, updateStatus: 'failure', updateError: error },
+    ),
     on(TasksActions.createEntered, (state): TasksState =>
       state.createStatus === 'pending'
         ? state
-        : { ...state, created: null, createStatus: 'idle', createError: null },
+        : { ...state, createStatus: 'idle', createError: null },
     ),
     on(TasksActions.createRequested, (state): TasksState => ({
       ...state,
-      created: null,
       createStatus: 'pending',
       createError: null,
     })),
-    on(TasksActions.createSucceeded, (state, { response }): TasksState => ({
+    on(TasksActions.createSucceeded, (state): TasksState => ({
       ...state,
-      created: response,
       createStatus: 'success',
       createError: null,
       list: [],
@@ -140,7 +185,7 @@ export const tasksFeature = createFeature({
       ...state,
       deletions: {
         ...state.deletions,
-        [request.taskId]: { status: 'pending', error: null },
+        [request.taskId]: createDeleteOperation('pending'),
       },
     })),
     on(TasksActions.deleteSucceeded, (state, { request }): TasksState => ({
@@ -152,8 +197,11 @@ export const tasksFeature = createFeature({
       detailStatus: state.detailId === request.taskId ? 'failure' : state.detailStatus,
       detailError:
         state.detailId === request.taskId
-          ? { status: 404, message: 'This task was deleted.', validationErrors: [] }
+          ? createApiError(404, 'This task was deleted.')
           : state.detailError,
+      detailEditing: state.detailId === request.taskId ? false : state.detailEditing,
+      updateStatus: state.detailId === request.taskId ? 'idle' : state.updateStatus,
+      updateError: state.detailId === request.taskId ? null : state.updateError,
       deletions: Object.fromEntries(
         Object.entries(state.deletions).filter(([id]) => id !== request.taskId),
       ),
@@ -161,7 +209,7 @@ export const tasksFeature = createFeature({
     on(TasksActions.deleteFailed, (state, { request, error }): TasksState => ({
       ...state,
       deletions: retainedDeletions(
-        { ...state.deletions, [request.taskId]: { status: 'failure', error } },
+        { ...state.deletions, [request.taskId]: createDeleteOperation('failure', error) },
         state.list,
         state.listActive,
         state.detailId,

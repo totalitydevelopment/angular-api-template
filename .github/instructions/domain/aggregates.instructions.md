@@ -1,5 +1,5 @@
 ---
-applyTo: "src/AngularApiTemplate.Domain/**/*.cs"
+applyTo: "AngularApiTemplate.Api/src/AngularApiTemplate.Domain/**/*.cs"
 ---
 
 Read `docs/architecture.md` at the repository root before editing. It is the

@@ -3,17 +3,51 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 
 import { provideMockActions } from '@ngrx/effects/testing';
-import { provideMockStore } from '@ngrx/store/testing';
 import { Action } from '@ngrx/store';
+import { provideMockStore } from '@ngrx/store/testing';
 import { of, Subject, throwError } from 'rxjs';
 
-import { CreateTaskResponse, GetTaskResponse, ListTasksResponse } from '../models/task-contracts';
+import { createApiError } from '../models/api-error';
+import {
+  CreateTaskResponse,
+  createDeleteTaskRequest,
+  createGetTaskRequest,
+  createReplaceTaskRequest,
+  createTaskRequest,
+  GetTaskResponse,
+  ListTaskResponse,
+  ListTasksResponse,
+  ReplaceTaskResponse,
+} from '../models/task-contracts';
 import { TasksApiService } from '../services/tasks-api.service';
 import { TasksActions } from './tasks.actions';
 import { TasksEffects } from './tasks.effects';
 import { initialTasksState } from './tasks.reducer';
 
-const task = { id: 'one', title: 'Test', description: null, isCompleted: false };
+const listTask: ListTaskResponse = {
+  id: 'one',
+  title: 'Test',
+  description: null,
+  isCompleted: false,
+};
+const createdTask: CreateTaskResponse = {
+  id: 'one',
+  title: 'Test',
+  description: null,
+  isCompleted: false,
+};
+const detailTask: GetTaskResponse = {
+  id: 'one',
+  title: 'Test',
+  description: null,
+  isCompleted: false,
+};
+const replacedTask: ReplaceTaskResponse = {
+  id: 'one',
+  title: 'Updated',
+  description: 'Notes',
+  isCompleted: true,
+};
 
 describe('TasksEffects', () => {
   let actions: Subject<Action>;
@@ -22,6 +56,7 @@ describe('TasksEffects', () => {
     list: vi.fn<TasksApiService['list']>(),
     create: vi.fn<TasksApiService['create']>(),
     get: vi.fn<TasksApiService['get']>(),
+    replace: vi.fn<TasksApiService['replace']>(),
     delete: vi.fn<TasksApiService['delete']>(),
   };
   const router = { url: '/tasks/create', navigate: vi.fn().mockResolvedValue(true) };
@@ -49,7 +84,7 @@ describe('TasksEffects', () => {
       .mockReturnValueOnce(old)
       .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 500 })))
       .mockReturnValueOnce(current)
-      .mockReturnValueOnce(of([task]));
+      .mockReturnValueOnce(of([listTask]));
     const outputs: Action[] = [];
     const sub = effects.list$.subscribe((action) => outputs.push(action));
     actions.next(TasksActions.listRequested());
@@ -57,10 +92,16 @@ describe('TasksEffects', () => {
     expect(old.observed).toBe(false);
     expect(outputs[0]?.type).toBe(TasksActions.listFailed.type);
     actions.next(TasksActions.listRequested());
-    actions.next(TasksActions.deleteSucceeded({ request: { taskId: 'one' }, origin: 'list' }));
+    actions.next(
+      TasksActions.deleteSucceeded({
+        generation: 0,
+        request: createDeleteTaskRequest('one'),
+        origin: 'list',
+      }),
+    );
     expect(current.observed).toBe(false);
     actions.next(TasksActions.listRequested());
-    expect(outputs[1]).toEqual(TasksActions.listSucceeded({ response: [task] }));
+    expect(outputs[1]).toEqual(TasksActions.listSucceeded({ generation: 0, response: [listTask] }));
     sub.unsubscribe();
   });
 
@@ -75,11 +116,11 @@ describe('TasksEffects', () => {
             }),
         ),
       )
-      .mockReturnValueOnce(of(task));
+      .mockReturnValueOnce(of(createdTask));
     const outputs: Action[] = [];
     const sub = effects.create$.subscribe((action) => outputs.push(action));
-    actions.next(TasksActions.createRequested({ request: { title: '' } }));
-    actions.next(TasksActions.createRequested({ request: { title: 'Test' } }));
+    actions.next(TasksActions.createRequested({ request: createTaskRequest('') }));
+    actions.next(TasksActions.createRequested({ request: createTaskRequest('Test') }));
     expect(outputs[0]).toMatchObject({
       type: TasksActions.createFailed.type,
       error: {
@@ -88,7 +129,9 @@ describe('TasksEffects', () => {
         validationErrors: [{ field: 'Title', messages: ['Required'] }],
       },
     });
-    expect(outputs[1]).toEqual(TasksActions.createSucceeded({ response: task }));
+    expect(outputs[1]).toEqual(
+      TasksActions.createSucceeded({ generation: 0, response: createdTask }),
+    );
     expect(api.create).toHaveBeenCalledTimes(2);
     expect(() => JSON.stringify(outputs)).not.toThrow();
     sub.unsubscribe();
@@ -97,34 +140,66 @@ describe('TasksEffects', () => {
     const pending = new Subject<CreateTaskResponse>();
     api.create.mockReturnValue(pending);
     const sub = effects.create$.subscribe();
-    actions.next(TasksActions.createRequested({ request: { title: 'Test' } }));
-    actions.next(TasksActions.createRequested({ request: { title: 'Duplicate' } }));
+    actions.next(TasksActions.createRequested({ request: createTaskRequest('Test') }));
+    actions.next(TasksActions.createRequested({ request: createTaskRequest('Duplicate') }));
     expect(api.create).toHaveBeenCalledOnce();
-    pending.next(task);
+    pending.next(createdTask);
     pending.complete();
-    actions.next(TasksActions.createRequested({ request: { title: 'Next' } }));
+    actions.next(TasksActions.createRequested({ request: createTaskRequest('Next') }));
     expect(api.create).toHaveBeenCalledTimes(2);
     sub.unsubscribe();
   });
   it('cancels old detail reads and suppresses stale responses', () => {
     const first = new Subject<GetTaskResponse>();
     const second = new Subject<GetTaskResponse>();
+    const secondDetailTask: GetTaskResponse = { ...detailTask, id: 'two' };
     api.get.mockReturnValueOnce(first).mockReturnValueOnce(second);
     const outputs: Action[] = [];
     const sub = effects.detail$.subscribe((action) => outputs.push(action));
-    actions.next(TasksActions.detailRequested({ request: { taskId: 'one' } }));
-    actions.next(TasksActions.detailRequested({ request: { taskId: 'two' } }));
+    actions.next(TasksActions.detailRequested({ request: createGetTaskRequest('one') }));
+    actions.next(TasksActions.detailRequested({ request: createGetTaskRequest('two') }));
     expect(first.observed).toBe(false);
-    first.next(task);
-    second.next({ ...task, id: 'two' });
+    first.next(detailTask);
+    second.next(secondDetailTask);
     expect(outputs).toEqual([
       TasksActions.detailSucceeded({
-        request: { taskId: 'two' },
-        response: { ...task, id: 'two' },
+        generation: 0,
+        request: createGetTaskRequest('two'),
+        response: secondDetailTask,
       }),
     ]);
     actions.next(TasksActions.detailClosed());
     expect(second.observed).toBe(false);
+    sub.unsubscribe();
+  });
+  it('exhausts duplicate update requests while pending and survives failures', () => {
+    const pending = new Subject<ReplaceTaskResponse>();
+    const request = createReplaceTaskRequest('one', 'Updated', 'Notes', true);
+    api.replace
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 403 })))
+      .mockReturnValueOnce(pending);
+    const outputs: Action[] = [];
+    const sub = effects.update$.subscribe((action) => outputs.push(action));
+    actions.next(TasksActions.updateRequested({ request }));
+    expect(outputs[0]).toEqual(
+      TasksActions.updateFailed({
+        generation: 0,
+        request,
+        error: createApiError(403, 'You do not have permission to perform this action.'),
+      }),
+    );
+    actions.next(TasksActions.updateRequested({ request }));
+    actions.next(
+      TasksActions.updateRequested({
+        request: createReplaceTaskRequest('one', 'Duplicate', null, false),
+      }),
+    );
+    expect(api.replace).toHaveBeenCalledTimes(2);
+    pending.next(replacedTask);
+    pending.complete();
+    expect(outputs[1]).toEqual(
+      TasksActions.updateSucceeded({ generation: 0, request, response: replacedTask }),
+    );
     sub.unsubscribe();
   });
   it('allows concurrent deletes for different IDs, gates duplicates, and recovers after failure', () => {
@@ -139,14 +214,22 @@ describe('TasksEffects', () => {
       outputs.push(action);
       actions.next(action);
     });
-    actions.next(TasksActions.deleteRequested({ request: { taskId: 'one' }, origin: 'list' }));
-    actions.next(TasksActions.deleteRequested({ request: { taskId: 'one' }, origin: 'list' }));
-    actions.next(TasksActions.deleteRequested({ request: { taskId: 'two' }, origin: 'list' }));
+    actions.next(
+      TasksActions.deleteRequested({ request: createDeleteTaskRequest('one'), origin: 'list' }),
+    );
+    actions.next(
+      TasksActions.deleteRequested({ request: createDeleteTaskRequest('one'), origin: 'list' }),
+    );
+    actions.next(
+      TasksActions.deleteRequested({ request: createDeleteTaskRequest('two'), origin: 'list' }),
+    );
     expect(api.delete).toHaveBeenCalledTimes(2);
     first.error(new HttpErrorResponse({ status: 500 }));
     second.next();
     second.complete();
-    actions.next(TasksActions.deleteRequested({ request: { taskId: 'one' }, origin: 'list' }));
+    actions.next(
+      TasksActions.deleteRequested({ request: createDeleteTaskRequest('one'), origin: 'list' }),
+    );
     expect(outputs.map((action) => action.type)).toEqual([
       TasksActions.deleteFailed.type,
       TasksActions.deleteSucceeded.type,
@@ -158,29 +241,34 @@ describe('TasksEffects', () => {
   it('navigates only on success while the initiating page is still current', () => {
     const sub = effects.afterCreate$.subscribe();
     actions.next(
-      TasksActions.createFailed({
-        error: { status: 500, message: 'Failed', validationErrors: [] },
-      }),
+      TasksActions.createFailed({ generation: 0, error: createApiError(500, 'Failed') }),
     );
     expect(router.navigate).not.toHaveBeenCalled();
     router.url = '/tasks/create#main-content';
-    actions.next(TasksActions.createSucceeded({ response: task }));
+    actions.next(TasksActions.createSucceeded({ generation: 0, response: createdTask }));
     expect(router.navigate).toHaveBeenCalledWith(['/tasks', 'one']);
     router.navigate.mockClear();
     router.url = '/elsewhere';
-    actions.next(TasksActions.createSucceeded({ response: task }));
+    actions.next(TasksActions.createSucceeded({ generation: 0, response: createdTask }));
     expect(router.navigate).not.toHaveBeenCalled();
     sub.unsubscribe();
     router.url = '/tasks/one#confirm';
     const deletes = effects.afterDelete$.subscribe();
     actions.next(
       TasksActions.deleteFailed({
-        request: { taskId: 'one' },
-        error: { status: 500, message: 'Failed', validationErrors: [] },
+        generation: 0,
+        request: createDeleteTaskRequest('one'),
+        error: createApiError(500, 'Failed'),
       }),
     );
     expect(router.navigate).not.toHaveBeenCalled();
-    actions.next(TasksActions.deleteSucceeded({ request: { taskId: 'one' }, origin: 'detail' }));
+    actions.next(
+      TasksActions.deleteSucceeded({
+        generation: 0,
+        request: createDeleteTaskRequest('one'),
+        origin: 'detail',
+      }),
+    );
     expect(router.navigate).toHaveBeenCalledWith(['/tasks']);
     deletes.unsubscribe();
   });

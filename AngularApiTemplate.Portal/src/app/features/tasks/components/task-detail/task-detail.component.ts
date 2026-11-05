@@ -12,18 +12,25 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 
 import { distinctUntilChanged, map } from 'rxjs';
 
+import {
+  createDeleteTaskRequest,
+  createGetTaskRequest,
+  ReplaceTaskRequest,
+} from '../../models/task-contracts';
 import { TasksFacade } from '../../store/tasks.facade';
+import { TaskDeleteConfirmationComponent } from '../task-delete-confirmation/task-delete-confirmation.component';
+import { TaskEditFormComponent } from '../task-edit-form/task-edit-form.component';
 
 @Component({
   selector: 'app-task-detail',
-  imports: [AsyncPipe, RouterLink],
+  imports: [AsyncPipe, RouterLink, TaskDeleteConfirmationComponent, TaskEditFormComponent],
   templateUrl: './task-detail.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TaskDetailComponent implements OnDestroy {
   private readonly facade = inject(TasksFacade);
   private readonly destroyRef = inject(DestroyRef);
-  readonly taskId = signal('');
+
   readonly confirmDelete = signal(false);
   readonly vm$ = this.facade.detailViewModel$;
 
@@ -35,20 +42,42 @@ export class TaskDetailComponent implements OnDestroy {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((taskId) => {
-        this.taskId.set(taskId);
         this.confirmDelete.set(false);
-        this.facade.openDetail({ taskId });
+        this.facade.openDetail(createGetTaskRequest(taskId));
       });
   }
 
-  retry(): void {
-    this.facade.openDetail({ taskId: this.taskId() });
-  }
-  delete(): void {
-    this.facade.delete({ taskId: this.taskId() }, 'detail');
-    this.confirmDelete.set(false);
-  }
   ngOnDestroy(): void {
     this.facade.closeDetail();
+  }
+
+  retry(): void {
+    this.facade.retryDetail();
+  }
+
+  startEdit(): void {
+    this.confirmDelete.set(false);
+    this.facade.startEdit();
+  }
+
+  cancelEdit(): void {
+    this.facade.cancelEdit();
+  }
+
+  saveEdit(request: ReplaceTaskRequest): void {
+    this.facade.update(request);
+  }
+
+  requestDelete(): void {
+    this.confirmDelete.set(true);
+  }
+
+  cancelDelete(): void {
+    this.confirmDelete.set(false);
+  }
+
+  delete(taskId: string): void {
+    this.facade.delete(createDeleteTaskRequest(taskId), 'detail');
+    this.confirmDelete.set(false);
   }
 }

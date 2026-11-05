@@ -4,7 +4,7 @@ A .NET 10 foundation and Angular 22 portal, developed on `init`.
 
 ## Prerequisites
 
-- .NET SDK **10.0.403** (pinned in `global.json`; later patches in this feature band are allowed).
+- .NET SDK **10.0.403** (pinned in `AngularApiTemplate.Api/global.json`; later patches in this feature band are allowed).
 - For the existing portal: Node.js **22.22.3+ in the 22 series**, **24.15.0+ in the 24 series**, or **26+**, and npm.
 - Azure Functions Core Tools v4 with .NET 10 isolated-worker support (verified with 4.7.0).
 - Azure CLI and access to the intended development vault only when enabling Key Vault.
@@ -18,23 +18,47 @@ export PATH="$DOTNET_ROOT:$PATH"
 
 On other machines, install the pinned SDK normally instead.
 
+On this Windows checkout the pinned SDK is installed per user at
+`C:\Users\Anon\.dotnet`. Select it in each PowerShell terminal before running
+restore/build/tests (the machine-wide installation has older SDKs):
+
+```powershell
+$env:DOTNET_ROOT = Join-Path $env:USERPROFILE '.dotnet'
+$env:PATH = "$env:DOTNET_ROOT;$env:PATH"
+dotnet --version # Run from AngularApiTemplate.Api to apply its SDK pin.
+```
+
+Expected version: `10.0.403`. Use `python` instead of `python3` for the local SQL
+helper on this Windows machine. The clone's local Git `core.autocrlf=input` setting
+preserves the LF line endings required by `.editorconfig`.
+
 ## Layout
 
 ```text
-src/
-  AngularApiTemplate.Domain/
-  AngularApiTemplate.Application/
-  AngularApiTemplate.Infrastructure/
-  AngularApiTemplate.Api/
-  AngularApiTemplate.Functions/
-tests/
-  AngularApiTemplate.Domain.Tests/
-  AngularApiTemplate.Application.Tests/
-  AngularApiTemplate.Infrastructure.IntegrationTests/
-  AngularApiTemplate.Api.IntegrationTests/
-  AngularApiTemplate.Architecture.Tests/
+AngularApiTemplate.Api/
+  AngularApiTemplate.slnx
+  Directory.Build.props
+  global.json
+  dotnet-tools.json
+  src/
+    AngularApiTemplate.Domain/
+    AngularApiTemplate.Application/
+    AngularApiTemplate.Infrastructure/
+    AngularApiTemplate.Api/
+    AngularApiTemplate.Functions/
+  tests/
+    AngularApiTemplate.Domain.Tests/
+    AngularApiTemplate.Application.Tests/
+    AngularApiTemplate.Infrastructure.IntegrationTests/
+    AngularApiTemplate.Api.IntegrationTests/
+    AngularApiTemplate.Architecture.Tests/
 AngularApiTemplate.Portal/
+  src/
 ```
+
+Shared documentation, agent guidance and orchestration scripts remain at the root.
+Run SQL/Entra helpers from the repository root; they select the backend directory
+automatically. Private `.local` data remains at the root.
 
 Application references Domain; Infrastructure references Application and Domain;
 API and Functions reference Application and Infrastructure. See [engineering rules](AGENTS.md),
@@ -42,7 +66,7 @@ the [architecture decisions](docs/architecture.md) and the [foundation handover]
 
 ## Restore, build and check
 
-From the repository root:
+From `AngularApiTemplate.Api` (run `cd AngularApiTemplate.Api` first):
 
 ```sh
 dotnet restore AngularApiTemplate.slnx
@@ -59,6 +83,8 @@ HTTP tests. Domain has focused invariant tests; Application's separate test proj
 still has no placeholder tests.
 
 ## Run the API locally
+
+From `AngularApiTemplate.Api`:
 
 ```sh
 dotnet run --project src/AngularApiTemplate.Api --launch-profile http
@@ -78,10 +104,10 @@ The development OpenAPI document is at `/openapi/v1.json`.
 Before the first run, create the private local settings file:
 
 ```sh
-cp src/AngularApiTemplate.Functions/local.settings.example.json src/AngularApiTemplate.Functions/local.settings.json
+cp AngularApiTemplate.Api/src/AngularApiTemplate.Functions/local.settings.example.json AngularApiTemplate.Api/src/AngularApiTemplate.Functions/local.settings.json
 ```
 
-From the repository root:
+From `AngularApiTemplate.Api`:
 
 ```sh
 dotnet run --project src/AngularApiTemplate.Functions --launch-profile local
@@ -121,10 +147,11 @@ only by explicit tooling or the isolated local test fixture.
 
 The operation-named controllers (`GetTask.cs`, `CreateTask.cs`, `ReplaceTask.cs`
 and `DeleteTask.cs`) live under `Controllers/Tasks`. Each has one action,
-uses ITaskService, and explicitly allows anonymous access. Request validation uses
+uses ITaskService, and declares the shared Customer policy. Entra authentication
+is disabled by default, so local template requests still work anonymously. Request validation uses
 DataAnnotations and `TrimmedMaxLengthAttribute` on `CreateTaskRequest` and
 `ReplaceTaskRequest` so `[ApiController]` rejects invalid inputs before reaching
-the action. Authentication and authorization are pending; this is a local template example.
+the action. Enable the Entra integration below to require an authenticated customer.
 
 | Method | Route | Success | Missing record |
 | --- | --- | --- | --- |
@@ -268,12 +295,13 @@ was performed.
 | List | GET /tasks | None; no pagination/filtering | 200 array of TaskResponse |
 | Create | POST /tasks | Title and optional nullable Description | 201 TaskResponse and Location |
 | Detail | GET /tasks/{id} | GUID route ID, no body | 200 TaskResponse or 404 |
+| Edit | PUT /tasks/{id} | GUID route ID, Title, nullable Description and IsCompleted | 200 TaskResponse, 400 or 404 |
 | Delete | DELETE /tasks/{id} | GUID route ID, no body | 204 with no payload, or 404 |
 
 TaskResponse has id/title/description/isCompleted. Invalid input returns 400
 ValidationProblemDetails. These endpoints explicitly allow anonymous access until
-the identity block. The portal does not implement the backend PUT operation.
-OpenAPI annotations for create/get/delete/list now match these statuses/shapes.
+the identity block (see [Entra authentication prompt](docs/prompts/configure-entra-authentication.md)).
+OpenAPI annotations for create/get/replace/delete/list match these statuses/shapes.
 
 Tasks is a lazy standalone route configuration (`tasks.routes.ts`) with standalone
 OnPush components, feature-scoped NgRx state/effects and a facade. The lifecycle is
@@ -310,3 +338,145 @@ PUT now declares its 200/400/404 response metadata. Multiline service expression
 block bodies. Source/controller checks cover centralized imports, API contract classes,
 action naming and response statuses. These conventions supersede the earlier handover's
 common-import wording; docs/architecture.md remains authoritative.
+
+## Domain entity configuration
+
+See [entity configuration and validation ownership](docs/architecture.md#entity-configuration-and-validation-ownership)
+and the [reusable entity configuration prompt](docs/prompts/configure-domain-entity.md).
+TaskItemConfiguration owns storage lengths; API contracts validate HTTP input;
+TaskItem retains only business invariants and normalization.
+
+
+## Customer authentication: Entra External ID
+
+The template includes custom email-code signup/sign-in at `/login`, a lazy-route
+customer guard, API bearer tokens and a shared Customer endpoint policy. Both
+applications default to authentication disabled; no Entra request, secret or working
+Azure tenant is required to start them. Tasks remains one shared test collection.
+Authentication disabled means the API is intentionally anonymous, including outside
+Development. Enable it explicitly before exposing customer data.
+
+API integration: `AngularApiTemplate.Api/src/AngularApiTemplate.Api/appsettings.json` contains non-secret
+`Entra` placeholders. Set `Enabled` to true only after replacing `Instance` with
+`https://<tenant-subdomain>.ciamlogin.com/`, `TenantId` with the external tenant GUID,
+and `ClientId` plus `Audience` with the API registration GUID. The API expects v2
+access tokens. Environment overrides use `Entra__Enabled`, `Entra__TenantId`, etc.
+Enabled placeholders fail startup validation. Disabled placeholders are accepted.
+No client secret is needed to validate API bearer tokens.
+
+Portal integration: set `enabled` in `src/app/core/auth/auth.values.ts` to true after
+replacing `clientId`, `authority`, `apiScope` and `nativeAuthProxyUrl`. Keep these
+non-secret. The API scope example is `api://<api-client-id>/access_as_customer`.
+This is a single delegated permission for the Portal to call this API, not an
+endpoint permission matrix or paid-customer role. API authorization currently checks
+a valid delegated customer identity, with no business roles required. Role checks
+can later be added centrally to the Customer policy.
+
+Native sign-in, signup-to-sign-in continuation and token acquisition explicitly
+request `openid`, `profile` and `offline_access` alongside the API scope. The native
+SDK replaces its default scopes when custom scopes are supplied; requesting only
+the API scope can return an access token without the ID/refresh tokens needed to
+complete the SDK session. Do not remove these OIDC scopes when configuring an API.
+
+The corresponding Azure setup must already exist when enabled:
+
+1. An Entra **external tenant**, API registration exposing that delegated permission
+   with v2 access tokens, and a Portal public-client registration permitted to use
+   native authentication. Link the Portal to its signup/sign-in user flow and grant
+   its API permission according to the tenant's consent configuration.
+2. An email one-time-passcode user flow, without extra mandatory signup attributes.
+   This scaffold handles email-code signup and sign-in, rather than passwords,
+   social federation, MFA or additional attribute challenges.
+3. A native-auth reverse proxy configured for that tenant. Point the Portal's
+   `nativeAuthProxyUrl` at its API prefix. Microsoft native endpoints do not provide
+   browser CORS; the ordinary Tasks API CORS policy does not replace this proxy.
+   Its upstream must be fixed to the intended tenant and it must support the SDK's
+   initiation, challenge, continuation and token endpoints. Restrict proxy origins
+   to the Portal, forward only required methods/headers, disable token/body logging
+   and response caching, and configure rate limiting/WAF at that public entry point.
+4. Register `http://localhost:4200/login` and the hosted equivalent for browser
+   fallback as required by the selected registration. Configure deployed URLs and
+   `Cors:AllowedOrigins` explicitly; local API/Portal remain 5111/4200.
+
+The initial scaffold did not create Azure resources. The development setup below
+now provides real registrations, an email-code flow and a local proxy.
+Unsupported provider challenges show a plain retry error; they do not fabricate a
+successful session. Session cache uses sessionStorage. Sign out clears application
+state before awaiting local SDK sign-out; it is not a global tenant session revoke.
+
+The custom route uses `@azure/msal-browser/custom-auth` directly; the hosted-flow
+`@azure/msal-angular` wrapper and its redirect observable are intentionally unused.
+The root functional interceptor and canMatch guard remain inside core/auth. See
+[architecture and lifecycle ownership](docs/architecture.md) and the updated
+[developer handover](docs/prompts/configure-entra-authentication.md).
+
+Official integration references:
+[Angular native signup](https://learn.microsoft.com/en-us/entra/identity-platform/tutorial-native-authentication-single-page-app-angular-sign-up),
+[native authentication approaches](https://learn.microsoft.com/en-us/entra/external-id/customers/concept-choose-authentication-approach),
+[SPA native authentication and proxy prerequisites](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-native-authentication-single-page-app-sdk-sign-in).
+
+## Totality local Entra development
+
+The shared **Totality Development Local** external tenant is for local projects,
+not production. Its directory country is United Kingdom (directory data location
+Europe); its Azure resource group is `Totality-Identity-Dev` in UK South, linked to
+the existing Totality Pay-As-You-Go subscription. Core authentication is within
+Microsoft's free 50,000 monthly active user allowance, aggregated across tenants
+linked to the subscription. SMS, Front Door, Azure hosting and premium add-ons
+were not provisioned for this setup. A customer's registration in this directory
+does not grant business-directory or Azure administrative access.
+
+| Setting | Development value |
+| --- | --- |
+| Tenant ID | `1992ca53-10eb-45a4-b028-e6c430a6e70e` |
+| Domain | `totalitylocaldev.onmicrosoft.com` |
+| Authority | `https://totalitylocaldev.ciamlogin.com/` |
+| API client ID / v2 audience | `bdc716c2-1a0f-4e37-a304-d9d881c5ef8d` |
+| Portal client ID | `3bc9a510-7769-40da-977d-2d08d7199c91` |
+| Delegated API scope | `api://bdc716c2-1a0f-4e37-a304-d9d881c5ef8d/access_as_customer` |
+| Email-code flow | `LocalEmailSignupSignin` |
+| Portal callback | `http://localhost:4200/login` |
+| Native-auth proxy | `http://localhost:3001/api` |
+
+Both registrations are single-tenant. The API exposes the scope and requests v2
+access tokens. The Portal enables public-client/native authentication, has the
+delegated scope granted by the tenant administrator, and is linked to the email
+one-time-passcode flow without extra signup attributes. No client secrets were
+created. The Portal's unused default Graph User.Read permission was removed.
+Each future local project should have its own client/API registrations and scopes;
+the tenant's customer directory and some settings remain shared.
+
+Default `npm start`, default/production builds and API settings still leave
+authentication disabled. Opt in to real development identity in three terminals:
+
+```powershell
+# Repository root: local-only native authentication proxy.
+node scripts/entra-proxy.mjs
+
+# Repository root, after selecting the SDK and starting/migrating local SQL.
+python scripts/tasks-local.py run-entra
+
+# AngularApiTemplate.Portal directory.
+npm run start:entra
+```
+
+Open `http://localhost:4200/login` and select **Create an account** for a new customer
+or **Sign in** for an existing customer. Use an email you control and enter its code.
+This is passwordless email authentication; no password reset is needed for these
+accounts. The API's `/health` remains public; anonymous `/tasks` returns 401 in
+this mode. Stop an existing API/Portal before switching launch modes on the same
+ports. `run-entra` enables authentication through a process environment override
+and uses the existing dedicated local SQL configuration.
+
+`auth.values.local.ts` supplies the non-secret Portal values through the opt-in
+Angular `local-entra` file replacement. API Development JSON supplies its non-secret
+tenant/API values; base settings retain placeholders. The proxy reads
+`scripts/entra-local.json`, binds only to 127.0.0.1:3001, permits only the Portal
+origin, approved native sign-in/signup POST paths and configured client ID, and
+forwards to the fixed tenant over validated HTTPS. It bounds request size/time and
+disables caching. Diagnostics include only HTTP status and constrained provider
+error codes, never request bodies, codes, tokens or provider error descriptions.
+It is a development helper, not a production proxy or identity emulator.
+
+Production needs separate explicit identity/hosting configuration. Bicep work is
+deferred; no deployment automation was added by this setup.

@@ -83,15 +83,15 @@ label span {
   font-weight: 400;
   color: #526579;
 }
-input,
+input:not([type='checkbox']),
 textarea {
   width: 100%;
   padding: 0.65rem;
   border: 1px solid #768798;
   border-radius: 0.3rem;
 }
-input[aria-invalid='true'],
-textarea[aria-invalid='true'] {
+input.ng-touched.ng-invalid,
+textarea.ng-touched.ng-invalid {
   border-color: #b12e39;
 }
 fieldset p {

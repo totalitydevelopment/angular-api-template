@@ -1,4 +1,7 @@
 <header class="app-header">
   <a routerLink="/tasks" class="brand">Angular API Template</a><span>Tasks example</span>
+  @if (auth.config.enabled && auth.authenticated()) {
+    <button type="button" (click)="auth.logout()">Sign out</button>
+  }
 </header>
 <main id="main-content"><router-outlet /></main>

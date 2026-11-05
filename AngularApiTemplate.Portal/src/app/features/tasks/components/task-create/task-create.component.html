@@ -1,19 +1,15 @@
 <a routerLink="/tasks">← All tasks</a>
 <h1>Create a task</h1>
 @if (vm$ | async; as vm) {
+  @let title = form.controls.title;
+  @let description = form.controls.description;
   <form [formGroup]="form" (ngSubmit)="submit()" [attr.aria-busy]="vm.pending" novalidate>
     <fieldset [disabled]="vm.pending">
       <label for="task-title">Title <span>(required)</span></label>
       <p id="title-help">1–200 characters after trimming.</p>
-      <input
-        id="task-title"
-        formControlName="title"
-        required
-        [attr.aria-invalid]="titleInvalid ? 'true' : null"
-        [attr.aria-describedby]="titleInvalid ? 'title-help title-error' : 'title-help'"
-      />
-      @if (titleInvalid) {
-        <p id="title-error" class="error">Enter a title between 1 and 200 characters.</p>
+      <input id="task-title" formControlName="title" required aria-describedby="title-help" />
+      @if (title.touched && title.invalid) {
+        <p class="error">Enter a title between 1 and 200 characters.</p>
       }
       <label for="task-description">Description <span>(optional)</span></label>
       <p id="description-help">Up to 2,000 characters.</p>
@@ -21,15 +17,10 @@
         id="task-description"
         formControlName="description"
         rows="5"
-        [attr.aria-invalid]="descriptionInvalid ? 'true' : null"
-        [attr.aria-describedby]="
-          descriptionInvalid ? 'description-help description-error' : 'description-help'
-        "
+        aria-describedby="description-help"
       ></textarea>
-      @if (descriptionInvalid) {
-        <p id="description-error" class="error">
-          Description must be no longer than 2,000 characters.
-        </p>
+      @if (description.touched && description.invalid) {
+        <p class="error">Description must be no longer than 2,000 characters.</p>
       }
       <button type="submit" [disabled]="vm.pending">
         {{ vm.pending ? 'Creating…' : 'Create task' }}

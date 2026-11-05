@@ -1,0 +1,12 @@
+global using System.ComponentModel.DataAnnotations;
+global using AngularApiTemplate.Api;
+global using AngularApiTemplate.Api.Authentication;
+global using AngularApiTemplate.Application;
+global using AngularApiTemplate.Application.Tasks;
+global using AngularApiTemplate.Domain.Tasks;
+global using AngularApiTemplate.Infrastructure;
+global using AngularApiTemplate.Infrastructure.Configuration;
+global using Microsoft.AspNetCore.Authentication.JwtBearer;
+global using Microsoft.AspNetCore.Authorization;
+global using Microsoft.AspNetCore.Mvc;
+global using Microsoft.Identity.Web;

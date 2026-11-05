@@ -1,0 +1,14 @@
+@let state = deletion();
+@if (confirming()) {
+  <div class="confirmation" role="group" aria-label="Confirm deletion">
+    <p>Delete “{{ taskTitle() }}”? This cannot be undone.</p>
+    <button type="button" class="danger" (click)="confirmed.emit()">Confirm delete</button>
+    <button type="button" (click)="cancelled.emit()">Cancel</button>
+  </div>
+}
+@if (state.pending) {
+  <p role="status">Deleting task…</p>
+}
+@if (state.error; as error) {
+  <p class="error" role="alert">Delete failed: {{ error.message }} Try deleting again.</p>
+}

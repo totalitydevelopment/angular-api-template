@@ -14,7 +14,12 @@ import { tasksFeature } from './store/tasks.reducer';
 export const TASKS_ROUTES: Routes = [
   {
     path: '',
-    providers: [provideState(tasksFeature), provideEffects(TasksEffects), TasksFacade, TasksApiService],
+    providers: [
+      provideState(tasksFeature),
+      provideEffects(TasksEffects),
+      TasksFacade,
+      TasksApiService,
+    ],
     children: [
       { path: '', pathMatch: 'full', component: TaskListComponent },
       { path: 'create', component: TaskCreateComponent },

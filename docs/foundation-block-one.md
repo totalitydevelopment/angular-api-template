@@ -277,3 +277,191 @@ Preflight tests allow 4200 and reject 5200 and an unrelated origin. All 57 backe
 checks and 22 portal tests passed; strict app TypeScript, production portal build and
 .NET formatting verification passed. The default shell dotnet lacked the pinned SDK;
 validation succeeded with the isolated SDK documented in README.
+
+## Entity configuration ownership follow-up (2026-11-05)
+
+Supersedes the earlier domain-length-guard decision. Existing TaskItemConfiguration
+now owns the unchanged SQL lengths (Title 200, Description 2000). Domain storage
+constants and length guards were removed; the nonblank-title rule and trimming remain.
+API-local TaskRequestLimits supplies both HTTP contracts. No relational schema change
+is intended and migration artifacts were left unchanged. New domain regressions cover
+in-memory values beyond storage limits and atomic rejection of a blank replacement.
+New model checks compare both HTTP contracts to SQL Server metadata and the existing
+migration snapshot without connecting. Architecture documents validation ownership,
+non-HTTP entry-point responsibilities and a linked reusable configuration prompt.
+Same Page was inspected read-only, including actual Data/Config implementations.
+
+Verification on this Windows machine completed after installing SDK 10.0.403 at
+C:/Users/Anon/.dotnet and selecting it through DOTNET_ROOT/PATH (README has PowerShell
+commands). Solution/tool restore passed; final solution build passed with zero
+warnings/errors. First Functions build emitted AZFW0108 while restoring generated
+extensions; the subsequent build was clean. dotnet format --verify-no-changes and
+git diff --check passed after preserving LF checkout endings with local
+core.autocrlf=input. No additional source changes resulted from formatting.
+
+All 60 backend tests passed: 13 architecture, 7 domain, 11 infrastructure and 29 API
+checks, including the new HTTP/model/snapshot alignment tests and real SQL Server
+HTTP persistence/validation. Application.Tests remains intentionally empty. Initial
+SQL tests failed because the dedicated database setup was absent; after Docker
+Desktop recovered and scripts/tasks-local.py up started the dedicated SQL Server 2022
+container on 127.0.0.1:11433, scripts/tasks-local.py test passed in full. The fixture
+applied migrations only to its unique test database. Private generated SQL credentials
+remain ignored with a user-only Windows ACL. Portal/browser verification was not
+repeated for this backend-only change. No commit, push, deployment or Azure provisioning
+occurred.
+
+## Portal CRUD, component architecture and Entra readiness follow-up (2026-11-05)
+
+Completed the Portal Tasks CRUD lifecycle by adding `PUT /tasks/{id}` replacement
+(`createReplaceTaskRequest`, `TasksApiService.replace`, `TasksActions` edit/update
+events, `update$` effect with `exhaustMap`, reducer/selector `UpdateViewModel` slice,
+extracted `task-edit.form.ts` and presentational `TaskEditFormComponent` orchestrated
+by `TaskDetailComponent`). Replaced `Store.select + take(1).subscribe(...)` guards in
+`TasksFacade` with synchronous `Store.selectSignal` reads so the facade has zero manual
+subscriptions, removed the unread `created` snapshot from `TasksState`, restored static
+`aria-describedby` field hint associations on the create and edit forms, added explicit
+401/403 messages in `toApiError`, and added `docs/prompts/configure-entra-authentication.md`
+for the upcoming Microsoft Entra ID (MSAL) block.
+
+
+## Entra External ID customer authentication scaffold (2026-11-05)
+
+Implemented the agreed native/custom customer route with email one-time codes and
+non-secret placeholders. Both API Entra:Enabled and Portal authConfig.enabled are
+false by default, so startup and anonymous Tasks still work. The shared Customer
+policy attributes remain on all five Tasks controllers; the disabled policy bypass
+is central rather than manually commenting each attribute. Enabled mode validates
+CIAM tenant/API configuration at startup and uses Microsoft.Identity.Web 4.17.0 /
+JwtBearer. It requires an authenticated delegated customer (oid/scp), with no paid
+status, per-endpoint scope matrix or business roles. Health remains anonymous.
+Tasks is still a shared collection; no identity or schema changes reached Domain,
+Application, Infrastructure or Functions as part of this auth block.
+
+Portal MSAL Browser 5.28.0 (MSAL Common 16.16.0) is dynamically loaded from core/auth.
+The native SDK is used directly; MSAL Angular's hosted-flow wrapper is not installed.
+Custom /login handles signup, sign-in, email-code verification, local sign-out and
+safe return to Tasks. The single root HTTP interceptor adds API tokens only across
+the configured origin/path boundary. A functional canMatch prevents anonymous
+loading of protected routes when enabled. Root monotonic session generation resets
+registered feature state, cancels active Tasks reads and mutations, closes delete
+groups and rejects stale successes/failures and navigation/refresh side effects.
+SDK events are removed on root destruction; page departure invalidates native flow
+continuations and clears obsolete completed accounts before releasing the gate.
+No token, raw SDK account or HttpErrorResponse is stored in NgRx.
+
+Real native auth requires the external tenant, public-client/API registrations,
+email-OTP user flow, delegated API permission and a configured native-auth CORS
+proxy. These are explicit integration placeholders in README, not resources created
+or verified here. Live Entra signup/sign-in, real token refresh, proxy forwarding,
+MFA, federation and extra signup attribute challenges have not been exercised.
+Session tests use an SDK mock, and API JWT tests use real signature/issuer/audience/
+expiry validation against test-only local signing metadata; they do not contact Entra.
+
+Verification: solution restore and final dotnet build passed with zero warnings or
+errors; dotnet format --verify-no-changes passed. All 73 backend tests passed (13
+architecture, 7 domain, 11 infrastructure and 42 API), including SQL-backed
+authenticated CRUD (200/201/204), anonymous 401, app-only 403, invalid signature,
+audience, issuer and expired-token rejection, config validation and disabled-mode
+regressions. The dedicated local SQL container was started after the first run
+found it stopped; test fixtures migrated/dropped only their isolated databases.
+The temporary API used for browser verification was stopped to release Windows
+build locks before the final clean build, then restarted. The local API and Portal
+dev servers remain running with authentication disabled.
+
+Portal typecheck, format:check, 42 tests across seven files and production build
+passed. Tests cover canMatch lazy loading, bearer URL boundaries, disabled bypass,
+401/403 serialization, all five in-flight operation cancellations, feature reset,
+late responses, lazy registration after session changes, native signup/sign-in,
+SDK callback removal, account/tenant generation and late native account cleanup.
+An existing edit-form HTML formatting issue was normalized for the required check.
+Final production output has a 289.22 kB initial bundle, separate 26.95 kB Tasks lazy
+chunk and dynamically loaded 429.75 kB MSAL SDK chunk. Browser verification against
+the local SQL-backed API confirmed /login's disabled message and navigation to an
+empty Tasks list, without contacting Entra. No heap/GC profiling was performed.
+
+README, architecture and the reusable auth prompt now describe this agreed native
+scope and setup. Work stayed on init with pre-existing edits preserved. No commit,
+push, deployment or Azure provisioning was performed.
+
+## Real development Entra setup (2026-11-05)
+
+User authorized a reusable local-development external tenant under Totality and
+created it from the prepared review screen, then completed administrator MFA.
+Totality Development Local (`1992ca53-10eb-45a4-b028-e6c430a6e70e`,
+`totalitylocaldev.onmicrosoft.com`) is linked to the existing Totality subscription
+through Totality-Identity-Dev in UK South. Directory country is United Kingdom,
+with Europe directory residency. No SMS, Front Door, Azure app hosting, premium
+add-on, secret, production identity or Bicep deployment was provisioned.
+
+Created AngularApiTemplate API - Local and AngularApiTemplate Portal - Local.
+API client ID is bdc716c2-1a0f-4e37-a304-d9d881c5ef8d; Portal client ID is
+3bc9a510-7769-40da-977d-2d08d7199c91. Verified API manifest token version 2 and
+defined access_as_customer (scope ID a28f1d8c-dcfa-46a5-af6a-e036d3ad660b).
+User approved Microsoft Platform Policies for both registrations and separately
+approved the Portal's development-only delegated API grant. Portal public-client
+and native authentication are enabled, its SPA callback is localhost:4200/login,
+and its unused default Graph User.Read permission was removed. Created
+LocalEmailSignupSignin using email OTP and no additional signup attributes, then
+verified the Portal appears in its Applications list. Other projects need their
+own registrations/scopes; this tenant's customer directory/settings are shared.
+
+Added opt-in Angular local-entra configuration and start:entra, public development
+values, API Development Entra IDs and tasks-local.py run-entra. Default template
+and production settings remain disabled/placeholders. Added a loopback-only local
+native-auth proxy with fixed tenant/client/origin, endpoint/header/method checks,
+bounded bodies/timeouts, cancellation, no caching and no credential/body logging.
+README and architecture describe values, boundaries and repeatable launch commands.
+
+Verification: 42 Portal tests, strict typecheck, formatting, default production
+build and development/local-entra build passed. All 73 backend tests and solution
+build (zero warnings/errors) and .NET formatting passed. The placeholder-startup
+test now supplies its own invalid placeholders explicitly rather than depending
+on Development JSON remaining invalid. Seven live local proxy checks passed for
+health/CORS and rejection of unapproved origin/header/path/method/client, without
+contacting Entra. Live API /health returned 200 and anonymous /tasks returned 401
+after replacing the existing disabled-mode API with run-entra. Proxy, Portal and
+API were left running for customer testing; no source commit/push occurred.
+
+Live custom Angular signup reached Entra and requested email verification for the
+user-approved test address. The submitted code produced the application's generic
+verification error. Subsequent diagnosis found an accepted OTP/token HTTP 200
+response containing only an access token: supplying the API scope replaced native
+MSAL's default OIDC scopes. AuthService now explicitly includes openid, profile and
+offline_access with the API scope for sign-in, signup continuation and access-token
+acquisition. Earlier attempts also returned invalid_oob_value/501811; do not label
+every generic verification error an incorrect code. Error copy now distinguishes
+an invalid/expired code from failure to complete sign-in, without provider details.
+
+Final live verification used the user's single in-app-browser session. Entra's
+native token endpoint returned 200, the app established its SDK session and
+navigated to /tasks, and the real SQL-backed protected API GET /tasks returned 200.
+A full page reload restored the signed-in session and another GET /tasks returned
+200 without a new email code. Earlier anonymous GET /tasks returned 401. This
+proves real email-code sign-in, proxy forwarding, token acquisition, bearer API
+validation and cached session restoration. Refresh-token renewal after expiry,
+fresh-account automatic signup continuation, MFA/federation and full authenticated
+CRUD were not re-exercised in this live follow-up. Existing backend tests cover
+authenticated CRUD using local test signing metadata.
+
+After the scope/error fix, 43 Portal tests, strict typecheck, production build and
+formatting passed. Regression expectations cover OIDC+API scopes for ordinary
+sign-in, signup continuation and access-token acquisition, plus specific invalid
+code messaging without leaking provider descriptions. Backend code did not change
+after its 73-test/build/format verification. Local screenshots are in ignored
+.local/entra-setup; authenticated-tasks.png records the working signed-in page.
+Temporary browser Network diagnostics were disabled after verification; no tokens
+or verification codes were written to source or logs. Bicep remains deferred.
+
+## Backend directory restructure (2026-11-05)
+
+Moved the .NET solution, src, tests, Directory.Build.props, global.json and local
+EF tool manifest into AngularApiTemplate.Api, alongside AngularApiTemplate.Portal.
+Shared documentation, scripts and ignored local state remain at repository root.
+Updated startup commands, helper working directories and scoped agent instructions.
+Project references and architecture root discovery remain relative to the solution.
+
+Validation after relocation: all 73 backend tests passed against isolated SQL
+test databases, solution build passed with zero warnings/errors, EF tool restore
+and .NET formatting passed. Portal 43 tests, typecheck, formatting and production
+build passed before the backend-only move. Restarted the Entra-enabled local API
+from its new location. No database or Azure resources were changed by the move.

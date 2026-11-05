@@ -8,3 +8,19 @@ export interface ApiError {
   readonly message: string;
   readonly validationErrors: readonly ValidationError[];
 }
+
+export function createValidationError(field: string, messages: readonly string[]): ValidationError {
+  return { field, messages };
+}
+
+export function createApiError(
+  status: number,
+  message: string,
+  validationErrors: readonly ValidationError[] = [],
+): ApiError {
+  return {
+    status,
+    message,
+    validationErrors,
+  };
+}

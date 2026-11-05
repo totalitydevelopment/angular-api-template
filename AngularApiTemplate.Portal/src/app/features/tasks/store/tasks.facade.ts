@@ -1,11 +1,18 @@
 import { inject, Injectable } from '@angular/core';
 
 import { Store } from '@ngrx/store';
-import { Observable, take } from 'rxjs';
+import { Observable } from 'rxjs';
 
-import { CreateTaskRequest, DeleteTaskRequest, GetTaskRequest } from '../models/task-contracts';
+import {
+  createGetTaskRequest,
+  CreateTaskRequest,
+  DeleteTaskRequest,
+  GetTaskRequest,
+  ReplaceTaskRequest,
+} from '../models/task-contracts';
 import type {
   TaskCreateViewModel,
+  TaskDeleteOrigin,
   TaskDetailViewModel,
   TaskListViewModel,
 } from '../models/tasks-view-models';
@@ -20,57 +27,77 @@ import {
 @Injectable()
 export class TasksFacade {
   private readonly store = inject(Store);
+  private readonly listActive = this.store.selectSignal(tasksFeature.selectListActive);
+  private readonly listStatus = this.store.selectSignal(tasksFeature.selectListStatus);
+  private readonly detailId = this.store.selectSignal(tasksFeature.selectDetailId);
+  private readonly createStatus = this.store.selectSignal(tasksFeature.selectCreateStatus);
+  private readonly updateStatus = this.store.selectSignal(tasksFeature.selectUpdateStatus);
+  private readonly deletions = this.store.selectSignal(tasksFeature.selectDeletions);
+
   readonly createViewModel$: Observable<TaskCreateViewModel> =
     this.store.select(selectCreateViewModel);
   readonly detailViewModel$: Observable<TaskDetailViewModel> =
     this.store.select(selectDetailViewModel);
-
   readonly listViewModel$: Observable<TaskListViewModel> = this.store.select(selectListViewModel);
 
   openList(): void {
-    this.store
-      .select(tasksFeature.selectListActive)
-      .pipe(take(1))
-      .subscribe((active) => {
-        if (!active) this.store.dispatch(TasksActions.listEntered());
-      });
+    if (!this.listActive()) {
+      this.store.dispatch(TasksActions.listEntered());
+    }
   }
+
   closeList(): void {
     this.store.dispatch(TasksActions.listClosed());
   }
+
   refreshList(): void {
-    this.store
-      .select(tasksFeature.selectListStatus)
-      .pipe(take(1))
-      .subscribe((status) => {
-        if (status !== 'pending') this.store.dispatch(TasksActions.listRequested());
-      });
+    if (this.listStatus() !== 'pending') {
+      this.store.dispatch(TasksActions.listRequested());
+    }
   }
+
   openCreate(): void {
     this.store.dispatch(TasksActions.createEntered());
   }
+
   openDetail(request: GetTaskRequest): void {
     this.store.dispatch(TasksActions.detailRequested({ request }));
   }
+
+  retryDetail(): void {
+    const taskId = this.detailId();
+    if (taskId !== null) {
+      this.store.dispatch(TasksActions.detailRequested({ request: createGetTaskRequest(taskId) }));
+    }
+  }
+
   closeDetail(): void {
     this.store.dispatch(TasksActions.detailClosed());
   }
-  create(request: CreateTaskRequest): void {
-    this.store
-      .select(tasksFeature.selectCreateStatus)
-      .pipe(take(1))
-      .subscribe((status) => {
-        if (status !== 'pending') this.store.dispatch(TasksActions.createRequested({ request }));
-      });
+
+  startEdit(): void {
+    this.store.dispatch(TasksActions.editStarted());
   }
-  delete(request: DeleteTaskRequest, origin: 'list' | 'detail'): void {
-    this.store
-      .select(tasksFeature.selectDeletions)
-      .pipe(take(1))
-      .subscribe((deletions) => {
-        if (deletions[request.taskId]?.status !== 'pending') {
-          this.store.dispatch(TasksActions.deleteRequested({ request, origin }));
-        }
-      });
+
+  cancelEdit(): void {
+    this.store.dispatch(TasksActions.editCancelled());
+  }
+
+  update(request: ReplaceTaskRequest): void {
+    if (this.updateStatus() !== 'pending') {
+      this.store.dispatch(TasksActions.updateRequested({ request }));
+    }
+  }
+
+  create(request: CreateTaskRequest): void {
+    if (this.createStatus() !== 'pending') {
+      this.store.dispatch(TasksActions.createRequested({ request }));
+    }
+  }
+
+  delete(request: DeleteTaskRequest, origin: TaskDeleteOrigin): void {
+    if (this.deletions()[request.taskId]?.status !== 'pending') {
+      this.store.dispatch(TasksActions.deleteRequested({ request, origin }));
+    }
   }
 }

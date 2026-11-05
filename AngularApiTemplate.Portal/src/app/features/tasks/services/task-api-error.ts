@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 
-import { ApiError } from '../models/api-error';
+import { ApiError, createApiError, createValidationError } from '../models/api-error';
 
 interface ProblemDetails {
   readonly title?: string | null;
@@ -45,27 +45,24 @@ function isProblemDetails(value: unknown): value is ProblemDetails {
 
 export function toApiError(error: unknown): ApiError {
   if (!(error instanceof HttpErrorResponse)) {
-    return {
-      status: 0,
-      message: 'The request could not be completed. Please try again.',
-      validationErrors: [],
-    };
+    return createApiError(0, 'The request could not be completed. Please try again.');
   }
   const body: unknown = error.error;
   const problem = isProblemDetails(body) ? body : null;
-  return {
-    status: error.status,
-    message:
-      error.status === 0
-        ? 'Cannot reach the API. Check the connection and try again.'
-        : error.status === 404
-          ? 'This task was not found.'
-          : error.status >= 500
-            ? 'The server could not complete the request. Please try again.'
-            : (problem?.title ?? problem?.detail ?? 'The request could not be completed.'),
-    validationErrors: Object.entries(problem?.errors ?? {}).map(([field, messages]) => ({
-      field,
-      messages,
-    })),
-  };
+  const message =
+    error.status === 0
+      ? 'Cannot reach the API. Check the connection and try again.'
+      : error.status === 401
+        ? 'Authentication is required. Please sign in and try again.'
+        : error.status === 403
+          ? 'You do not have permission to perform this action.'
+          : error.status === 404
+            ? 'This task was not found.'
+            : error.status >= 500
+              ? 'The server could not complete the request. Please try again.'
+              : (problem?.title ?? problem?.detail ?? 'The request could not be completed.');
+  const validationErrors = Object.entries(problem?.errors ?? {}).map(([field, messages]) =>
+    createValidationError(field, messages),
+  );
+  return createApiError(error.status, message, validationErrors);
 }

@@ -11,6 +11,8 @@ import {
   GetTaskRequest,
   GetTaskResponse,
   ListTasksResponse,
+  ReplaceTaskRequest,
+  ReplaceTaskResponse,
 } from '../models/task-contracts';
 
 @Injectable()
@@ -28,6 +30,14 @@ export class TasksApiService {
 
   get(request: GetTaskRequest): Observable<GetTaskResponse> {
     return this.http.get<GetTaskResponse>(`${this.url}/${encodeURIComponent(request.taskId)}`);
+  }
+
+  replace(request: ReplaceTaskRequest): Observable<ReplaceTaskResponse> {
+    return this.http.put<ReplaceTaskResponse>(`${this.url}/${encodeURIComponent(request.taskId)}`, {
+      title: request.title,
+      description: request.description,
+      isCompleted: request.isCompleted,
+    });
   }
 
   delete(request: DeleteTaskRequest): Observable<void> {

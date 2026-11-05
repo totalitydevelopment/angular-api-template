@@ -4,6 +4,10 @@ This is the durable source of architecture and coding decisions. Agent and GitHu
 instruction files point here. README owns runnable setup commands. The foundation
 handover records scope, reference decisions and verification evidence.
 
+The backend solution, source, tests and .NET configuration live under
+`AngularApiTemplate.Api/`; the Angular app lives under `AngularApiTemplate.Portal/`.
+Shared documentation and orchestration scripts remain at the repository root.
+
 ## Project ownership
 
 | Project | Owns | Direct project references |
@@ -11,7 +15,7 @@ handover records scope, reference decisions and verification evidence.
 | Domain | Entities, aggregates, value objects, business invariants, plain domain events | None |
 | Application | Application service interfaces/implementations, use-case request/results, validation, persistence interfaces | Domain |
 | Infrastructure | Concrete EF context, SQL Server configuration, entity configurations, migrations, external integrations | Application, Domain |
-| Api | HTTP endpoints, HTTP contracts, explicit mapping, future authentication, host composition | Application, Infrastructure |
+| Api | HTTP endpoints, HTTP contracts, explicit mapping, Entra authentication, host composition | Application, Infrastructure |
 | Functions | Thin Azure Functions isolated-worker entry points and host composition | Application, Infrastructure |
 
 Host references to Infrastructure are for composition and registration. Endpoint
@@ -52,8 +56,50 @@ Infrastructure owns fluent entity mappings, discovered through its assembly, so
 Domain needs no EF attributes. Migrations must include the migration `.cs`, its
 `.Designer.cs`, and the updated `AppDbContextModelSnapshot.cs`. Generate and inspect
 all artifacts together. CreateTasks is the first migration, with its Designer and
-model snapshot. The local dotnet-ef tool is pinned in dotnet-tools.json. Apply
+model snapshot. The local dotnet-ef tool is pinned in AngularApiTemplate.Api/dotnet-tools.json. Apply
 migrations only to an explicitly identified local development database in this block.
+
+## Entity configuration and validation ownership
+
+Every persisted domain entity has an explicit `<Entity>Configuration` implementing
+`IEntityTypeConfiguration<TEntity>` under Infrastructure/Persistence/Configurations.
+Configure keys, tables, required/optional columns, lengths, precision, indexes,
+relationships and delete behavior there, as applicable to the actual model.
+AppDbContext discovers these configurations with ApplyConfigurationsFromAssembly;
+do not manually create configuration instances or add a parallel configuration system.
+TaskItemConfiguration is the working example.
+
+Domain objects must not contain schema lengths/constants, EF attributes, column types,
+table/index settings or references to Infrastructure configuration. They remain usable
+in memory. Keep actual business invariants and normalization in domain behavior:
+TaskItem requires a nonblank title and trims it, but does not enforce 200/2,000-character
+storage limits. Do not remove genuine business rules merely because HTTP also checks
+input. A future business-specific length rule needs an explicit domain rationale.
+
+API request DataAnnotations own HTTP shape/length validation and return 400 before
+application workflows. TaskRequestLimits is API-local and shares values between
+create/replace contracts. Infrastructure owns its separate schema declarations;
+API code must not import EF configuration to obtain validation constants. The two
+boundaries intentionally describe matching limits, without repeating runtime length
+validation in Domain or Application. TaskValidationConfigurationTests checks both
+request models against the SQL Server model without opening a connection, and checks
+that the model still agrees with the migration snapshot. This does not replace SQL
+Server integration tests. Angular form limits provide immediate user feedback only.
+
+EF HasMaxLength configures the schema; it is not automatic pre-save validation.
+SQL Server remains the persistence backstop. Functions and future non-HTTP entry
+points bypass HTTP validation: validate their transport/input contracts before calling
+Application, rather than assuming API validation ran. Do not add speculative validators
+or translate arbitrary database failures into input-validation errors.
+
+Reference evidence: Same Page's infrastructure/data-access.instructions.md documents
+one fluent configuration per entity and assembly discovery. Its actual Data/Config
+WaitlistSignupConfiguration and UserBlockConfiguration demonstrate field configuration,
+keys, indexes and relationships; their product constants/schema conventions are not
+part of this template. The reference documentation's Configurations folder differs
+from its actual Config folder; this template retains its existing Configurations path.
+
+For a reusable implementation prompt, see [entity configuration prompt](prompts/configure-domain-entity.md).
 
 ## Contract ownership and mapping
 
@@ -87,12 +133,12 @@ operation’s success, validation and not-found responses with ProducesResponseT
 where applicable. Use ControllerBase, ApiController, explicit routing
 and binding, typed ActionResult<TResponse>, and primary-constructor DI where simple.
 Prefer resource-based routes. GET must never perform business writes.
-Authentication and authorization will be introduced with the first Entra provider;
-current-user access is deferred rather than generalized speculatively. Health is
+Entra authentication and the shared Customer policy belong to Api. Current-user
+access is deferred until a use case needs caller identity. Health is
 public process liveness only. No Firebase dependencies.
 
-The Tasks example explicitly allows anonymous access on its controllers until
-Entra authentication/authorization is implemented. ListTasks now supplies the collection GET. Routes
+The Tasks controllers declare the Customer authorization policy. Authentication is
+disabled by default for the runnable template; enabling Entra activates this policy. ListTasks now supplies the collection GET. Routes
 use /tasks and /tasks/{id}; no API version prefix is configured in this template.
 POST returns 201 with a Location generated from the named GET route; GET and PUT
 return 200 API response models; DELETE returns 204 with no body; missing records
@@ -101,9 +147,8 @@ return 404. Invalid fields, malformed IDs and missing required JSON properties r
 use DataAnnotations and custom ValidationAttribute classes on the API request models
 (`Required`, `MaxLength`, `TrimmedMaxLength`) so `[ApiController]` rejects invalid
 requests before reaching the controller action or Application service. PUT requires
-Title, Description (nullable) and IsCompleted explicitly. Domain constants on
-TaskItem define maximum lengths and domain creation/replacement methods still guard
-invariants directly. Invalid writes do not save; GET projects a no-tracking
+Title, Description (nullable) and IsCompleted explicitly. API-owned TaskRequestLimits define request lengths; EF configurations own column
+lengths. TaskItem guards only its nonblank-title business invariant and trims titles. Invalid writes do not save; GET projects a no-tracking
 Application result and never calls SaveChanges. Only explicitly constructed
 TaskResponse objects cross the HTTP business boundary.
 
@@ -200,39 +245,56 @@ token and empty root Store/Effects infrastructure. `TASKS_ROUTES` (`tasks.routes
 loaded through a dynamic import. State, effects, HTTP service and facade are provided
 once on the lazy feature route. No Tasks implementation is eagerly imported at root.
 Standalone OnPush components live in features/tasks/components/{task-list,task-create,
-task-detail}; contracts, services and store files remain feature-local. Core contains
-only app-wide configuration/infrastructure; importing its DI token is intentional.
-Shared is reserved for code with real reuse. No generic CRUD/store factories.
+task-detail,task-edit-form,task-delete-confirmation}; contracts, services and store files
+remain feature-local. Core contains only app-wide configuration/infrastructure; importing
+its DI token is intentional. Shared is reserved for code with real reuse across features.
+No generic CRUD/store factories.
 
 Components use TasksFacade intent methods and typed observable view models. They do
-not inject Store or HttpClient. Render observable state with async pipe and modern
-@if/@for blocks. Signals hold local confirmation state and route IDs, not server
-state. Reactive forms are typed; map form values explicitly to CreateTaskRequest.
-Place field hints above controls, link hints and active field errors via aria-describedby,
-synchronize aria-invalid with touched invalid controls, reserve role="alert" for
-critical submission/request errors, and include role="list" on lists styled with
-list-style: none.
-Use takeUntilDestroyed for component-owned manual subscriptions. The facade's
-unfiltered Store select + take(1) guards synchronously read the current state and
-complete; do not generalize this exception to filtered or asynchronous streams. This replaces the reference's custom Destroyable inheritance using
+not inject Store or HttpClient, and raw HTTP transport contracts do not leak into
+component templates. Keep route components strictly focused on view orchestration, and
+extract focused feature UI (`TaskEditFormComponent`, `TaskDeleteConfirmationComponent`)
+into presentational components using signal `input()` and `output()`. Render observable
+state with async pipe and modern @if/@for/@let blocks. Signals hold local confirmation
+state, not server state. Extract reactive form construction, validation limits,
+single-responsibility validators and explicit request mapping into dedicated form
+modules (`task-create.form.ts`, `task-edit.form.ts`) rather than inlining validators,
+magic numbers or payload normalization inside components. Construct request, error and
+state operation models through explicit typed factory functions (`createTaskRequest`,
+`createGetTaskRequest`, `createReplaceTaskRequest`, `createDeleteTaskRequest`,
+`createApiError`, `createValidationError`, `createDeleteOperation`) rather than untyped
+ad-hoc object literals. Avoid per-control `*Invalid` getters on component classes and
+ternary ARIA attribute bindings in templates; use static `aria-describedby` hint IDs,
+template `@let` control aliases (`control.touched && control.invalid`) for conditional
+error messages and `.ng-touched.ng-invalid` CSS rules for invalid control styling. Place
+field hints above controls, reserve role="alert" for critical submission/request errors,
+and include role="list" on lists styled with list-style: none.
+Use takeUntilDestroyed for component-owned manual subscriptions. The facade uses
+`Store.selectSignal` for synchronous state guards (avoiding manual `take(1)`
+subscriptions in facade intent methods); if an unfiltered `Store.select + take(1)` guard
+is used elsewhere, do not generalize it to filtered or asynchronous streams. This replaces the reference's custom Destroyable inheritance using
 the destination's supported Angular lifecycle APIs. Imports are Angular, libraries,
 then application; avoid unused imports, any, contract-hiding casts and production
-URLs/credentials. Authentication is pending; do not copy Firebase interceptors.
+URLs/credentials. Entra native authentication is owned by core/auth; do not copy Firebase interceptors.
 
 Actions use createActionGroup; createFeature/createReducer declare every state field;
 selectors compose narrow feature child selectors (never the whole feature state object
-when only specific slices are needed) to derive row labels, empty/loading states and
-per-ID deletion view models without unnecessary recomputation.
+when only specific slices are needed) to map endpoint responses (`GetTaskResponse`,
+`ListTaskResponse`) into dedicated view models (`TaskDetailItemViewModel`,
+`TaskRowViewModel`) with pre-formatted display labels, empty/loading states, update
+view models and per-ID deletion view models without unnecessary recomputation.
 Effects call the operation-specific service methods, catch errors inside the HTTP
-observable and map them through the service-layer error mapper to plain ApiError.
+observable and map them through the service-layer error mapper to plain ApiError
+(including explicit 401/403/404/500 messages).
 The ProblemDetails guard accepts null/optional fields without dropping validation errors.
 Do not put HttpErrorResponse instances into state. Runtime immutability and
-serializability checks are enabled. Pure immutable reducers own list/detail/create
-statuses/errors independently and maintain deletion status/errors per task ID.
+serializability checks are enabled. Pure immutable reducers own list/detail/create/update
+statuses/errors independently without retaining unread creation snapshots, and maintain
+deletion status/errors per task ID.
 
 List/detail reads switchMap to the latest request. Detail data clears on ID changes;
 leaving cancels the old read. List reads are cancelled on leaving or successful
-mutations so stale snapshots cannot restore deleted data. Create uses exhaustMap;
+mutations so stale snapshots cannot restore old data. Create and update use exhaustMap;
 the facade also rejects duplicate pending submits. Deletes group by ID with an
 exhaust gate per ID and merge groups for independent concurrent deletes. Groups
 close on success/failure so subscriptions do not accumulate indefinitely. There are
@@ -245,15 +307,17 @@ Duplicate pending refreshes are guarded. Successful mutations invalidate the lis
 a visible list reloads, and a later visit fetches fresh data. The approved list API
 is GET /tasks returning TaskResponse[], without pagination/filter/query inputs.
 The operation-specific list method therefore has no fabricated query/request DTO.
-Create/Get/List response type names share TaskFields because the actual API shares
-that shape. Delete uses a typed route request and Observable<void>, with no body or
-response envelope. PUT remains a backend example only; no portal edit flow exists.
+Create/Get/Replace/List response type names share TaskFields because the actual API
+shares that shape. Replace (`PUT /tasks/{id}`) sends a typed replacement body (`title`,
+`description`, `isCompleted`) and updates the active detail state in place on success.
+Delete uses a typed route request and Observable<void>, with no body or response
+envelope.
 
 The API URL is configured by environment.apiBaseUrl and injected through API_BASE_URL.
 Local development calls http://localhost:5111 directly (matching the API launch
 profile); no Angular development proxy is used. API Cors:AllowedOrigins is an
 explicit array: base settings allow no origins; Development allows
-http://localhost:4200. CORS middleware runs after routing and before future
+http://localhost:4200. CORS middleware runs after routing and before
 authentication/authorization. Configure deployed API URLs and allowed portal origins
 explicitly for each environment (see [ASP.NET Core CORS](https://learn.microsoft.com/en-us/aspnet/core/security/cors?view=aspnetcore-10.0)). Do not enable wildcard origins or credentialed
 requests without an actual authentication requirement. Do not register another
@@ -387,7 +451,7 @@ The latest list and create result are within-application retained snapshots, not
 page instances. Future background tasks must specify cancellation, replacement,
 completion/error behavior and auth boundaries before implementation.
 
-Authentication is not implemented. When adding logout/account/tenant switching,
+Authentication now wires logout/account/tenant switching. At that boundary,
 reset sensitive feature state, singleton subjects/caches and persisted data at the
 same boundary and cancel old requests. Also attach a session generation to requests
 and reject stale successes/failures in reducers, including already-running Promises.
@@ -403,7 +467,9 @@ on(loadSucceeded, (state, { generation, response }) =>
 
 Cancellation belongs inside the effect's active inner request, with sessionChanged
 as a cancellation source; apply the same generation guard to errors and mutations.
-Do not add a pretend logout or session framework to the anonymous template.
+Disabled mode bypasses real authentication without fabricating a customer identity. For a
+reusable developer handover prompt, see
+[Entra authentication prompt](prompts/configure-entra-authentication.md).
 
 Bound Maps/Sets, replay buffers and caches by actual ownership/eviction requirements.
 For shareReplay specify buffer size, refCount, source completion and observable
@@ -449,3 +515,88 @@ actual test/typecheck/build results, limitations and precise remaining profiling
 steps. Do not claim browser confirmation from static inspection or mocks. Avoid
 DevTools console variables, selected DOM nodes or measurement collections that
 themselves retain inspected instances. Keep all work local unless separately asked.
+
+
+### Entra customer authentication (2026-11-05)
+
+The user selected public customer signup with custom Angular pages, placeholders,
+and authentication disabled by default so the template remains runnable. Native
+email one-time codes are the initial method. Any authenticated delegated customer
+can use the shared Tasks collection. Paid access, user-owned data, business roles,
+app-only callers and Graph provisioning are outside this block.
+
+API Authentication/EntraOptions binds Entra and validates on startup when enabled:
+CIAM HTTPS Instance, nonempty tenant/API GUIDs and a v2 Audience matching API ClientId.
+Microsoft.Identity.Web composes JwtBearer. All Tasks controllers explicitly use
+Authorize(Policy = Customer), which bypasses authorization only when Entra:Enabled
+is false. When enabled it requires an authenticated identity, oid and a nonempty scp
+claim, excluding app-only tokens. The scope is transport permission for this API,
+not per-endpoint business authorization. Add future roles to this shared policy.
+Health explicitly remains anonymous. Middleware is routing → explicit-origin CORS
+→ authentication → authorization. No current-user abstraction, persistence change,
+SQL migration or Application/Domain identity dependency was needed.
+
+Portal core/auth exclusively owns MSAL, configuration, native signup/sign-in UI,
+canMatch, token interceptor and session state. This supersedes the original hosted
+redirect-flow handover: use @azure/msal-browser/custom-auth directly, without the
+@azure/msal-angular hosted-flow wrapper. Native code exchange is an SDK-managed
+native flow; do not describe it as a handwritten authorization-code/PKCE flow.
+The SDK is dynamically imported only when enabled. A native-auth proxy URL is a
+required external integration point because the provider's native endpoints do not
+support browser CORS. No proxy or Azure resource is provisioned by this template.
+See README for setup and the official proxy guidance.
+
+One root HttpClient uses a functional interceptor with exact URL origin and path
+boundary matching; no tokens go to other origins or sibling path prefixes. Tokens
+and SDK account objects never enter NgRx. MSAL owns its sessionStorage cache; no
+custom token persistence, credential logging or browser-wide localStorage cache is
+introduced. Native startup uses handleRedirectPromise once for browser fallback,
+not MsalService.handleRedirectObservable. No manual observable subscription is
+created; SDK callbacks have DestroyRef removal. The root AuthService owns the one
+SDK client and pending native flow. LoginComponent clears code/form flow on departure;
+all asynchronous UI/auth continuations check destruction and an operation epoch.
+Obsolete completed accounts are signed out before releasing the sign-in gate.
+
+Root sessionChanged carries a strictly increasing generation. A root meta-reducer
+resets all registered feature state (including Tasks to initialTasksState) and
+preserves the new root generation. Root ownership also covers lazy registration
+after login. Each HTTP effect captures generation at subscription time; all async
+success/failure actions carry it. Inner requests and delete group durations cancel
+on session change. The root reducer rejects stale responses, and effect-driven
+navigation, invalidation and refresh filter old generations too. Requests already
+accepted by the server may still commit after browser cancellation; there are no
+automatic mutation retries. SDK cache identity is checked at startup, guarded
+navigation, token acquisition and SDK events; changes of account/tenant reset the
+session. Multi-account selection UI and cross-tab sessions are not implemented.
+No polling, timers, global DOM listeners, route reuse strategy or widget resource
+was added. Resource validation uses mocked cancellation/lifecycle tests; it does
+not establish browser heap/GC retention evidence or live Entra correctness.
+
+### Real local Entra configuration
+
+Totality Development Local is a shared development external tenant. Each project
+uses separate client/API registrations; production must use separately configured
+identity resources. README owns actual IDs and commands. Default template and
+production build authentication remain disabled/placeholders. `auth.values.ts`
+owns default values; the explicit `local-entra` Angular configuration replaces it
+with `auth.values.local.ts`. Validation/DI stay in `auth.config.ts`. API Development
+JSON holds public development IDs; `tasks-local.py run-entra` opts in through
+Entra__Enabled for that process. Never ship the development tenant as a production
+default or copy credentials into either configuration.
+
+`scripts/entra-proxy.mjs` is a local-only native-auth transport helper. It binds to
+loopback, fixes upstream tenant/client/origin from public configuration, permits
+only known signup/sign-in endpoints and POST with form bodies, checks CORS
+preflights, bounds request size and timeout, aborts disconnected upstream work,
+validates upstream TLS and refuses redirects. Never log credentials, continuation
+tokens or response bodies. This is distinct from business API workflows and must
+not gain persistence/Application responsibilities. Production proxying and Bicep
+remain outside this setup.
+
+Native authentication explicitly supplies openid/profile/offline_access with the
+API scope for sign-in, signup continuation and token acquisition. Unlike an
+assumption carried from hosted MSAL, native MSAL uses a nonempty supplied scope
+list as-is instead of merging its defaults. A successful token HTTP response is
+not proof of an established SDK account: verify ID/refresh token acquisition,
+cached account restoration and the subsequent protected API request. Error copy
+must distinguish an invalid OTP from failure to establish a session after it.
