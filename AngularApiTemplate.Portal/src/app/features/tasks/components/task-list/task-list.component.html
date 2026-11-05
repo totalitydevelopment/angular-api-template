@@ -1,0 +1,53 @@
+<div class="toolbar">
+  <h1>Tasks</h1>
+  <a routerLink="/tasks/create">Create a task</a>
+</div>
+@if (vm$ | async; as vm) {
+  <button type="button" (click)="refresh()" [disabled]="vm.loading">Refresh tasks</button>
+  @if (vm.loading) {
+    <p role="status">Loading tasks…</p>
+  } @else if (vm.error; as error) {
+    <p class="error" role="alert">{{ error.message }}</p>
+    <button type="button" (click)="refresh()">Try again</button>
+  } @else if (vm.empty) {
+    <p>No tasks yet. Create your first task to get started.</p>
+  } @else if (vm.rows.length > 0) {
+    <ul class="task-list" role="list">
+      @for (task of vm.rows; track task.id) {
+        <li class="task-row">
+          <div class="task-row-head">
+            <h2>
+              <a [routerLink]="['/tasks', task.id]">{{ task.title }}</a>
+            </h2>
+            <button
+              type="button"
+              class="danger"
+              [disabled]="task.deletion.pending"
+              (click)="confirmingId.set(task.id)"
+              [attr.aria-label]="'Delete task: ' + task.title"
+            >
+              <span aria-hidden="true">✕</span> Delete
+            </button>
+          </div>
+          <p class="badge">{{ task.completionLabel }}</p>
+          @if (task.description) {
+            <p class="description">{{ task.description }}</p>
+          }
+          @if (confirmingId() === task.id) {
+            <div class="confirmation" role="group" aria-label="Confirm deletion">
+              <p>Delete “{{ task.title }}”? This cannot be undone.</p>
+              <button type="button" class="danger" (click)="delete(task.id)">Confirm delete</button>
+              <button type="button" (click)="confirmingId.set(null)">Cancel</button>
+            </div>
+          }
+          @if (task.deletion.pending) {
+            <p role="status">Deleting task…</p>
+          }
+          @if (task.deletion.error; as error) {
+            <p class="error" role="alert">Delete failed: {{ error.message }} Try deleting again.</p>
+          }
+        </li>
+      }
+    </ul>
+  }
+}

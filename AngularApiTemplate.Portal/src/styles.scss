@@ -1,0 +1,169 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #f4f6f8;
+  color: #182c3c;
+  font:
+    16px/1.6 system-ui,
+    sans-serif;
+}
+a {
+  color: #175d9a;
+  text-underline-offset: 3px;
+}
+a:hover {
+  color: #103e67;
+}
+button,
+input,
+textarea {
+  font: inherit;
+}
+button {
+  padding: 0.6rem 1rem;
+  border: 1px solid #175d9a;
+  border-radius: 0.4rem;
+  color: white;
+  background: #175d9a;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+button.danger {
+  background: #a72c35;
+  border-color: #a72c35;
+}
+:focus-visible {
+  outline: 3px solid #d58b0e;
+  outline-offset: 3px;
+}
+.app-header {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  padding: 1rem max(1.5rem, calc((100vw - 960px) / 2));
+  background: #142d43;
+  color: #d8e3eb;
+}
+.brand {
+  color: white;
+  font-weight: 700;
+  text-decoration: none;
+}
+main {
+  max-width: 960px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: white;
+  border: 1px solid #dce2e7;
+  border-radius: 0.65rem;
+}
+h1 {
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+fieldset {
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+label {
+  font-weight: 650;
+}
+fieldset label:not(:first-child) {
+  margin-top: 0.5rem;
+}
+label span {
+  font-weight: 400;
+  color: #526579;
+}
+input,
+textarea {
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid #768798;
+  border-radius: 0.3rem;
+}
+input[aria-invalid='true'],
+textarea[aria-invalid='true'] {
+  border-color: #b12e39;
+}
+fieldset p {
+  margin: 0;
+  color: #526579;
+  font-size: 0.9rem;
+}
+fieldset button {
+  justify-self: start;
+}
+.error,
+fieldset .error {
+  color: #9c202b;
+}
+.error {
+  background: #fff3f3;
+  border-left: 3px solid #b12e39;
+  padding: 0.65rem 1rem;
+}
+.confirmation {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #d6a3a6;
+  background: #fff6f6;
+  border-radius: 0.35rem;
+}
+.confirmation button {
+  margin-right: 0.6rem;
+}
+.description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 1rem;
+  background: #e7f0f7;
+  font-size: 0.85rem;
+}
+.task-list {
+  list-style: none;
+  padding: 0;
+}
+.task-row {
+  border-top: 1px solid #dce2e7;
+  padding: 1.2rem 0;
+}
+.task-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+.task-row h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+@media (max-width: 640px) {
+  main {
+    margin: 1rem;
+    padding: 1.2rem;
+  }
+  .app-header {
+    padding: 1rem;
+  }
+}

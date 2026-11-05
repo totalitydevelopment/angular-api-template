@@ -1,0 +1,40 @@
+<a routerLink="/tasks">← All tasks</a>
+@if (vm$ | async; as vm) {
+  @if (vm.loading) {
+    <h1>Task</h1>
+    <p role="status">Loading task…</p>
+  } @else if (vm.notFound) {
+    <h1>Task not found</h1>
+    <p>It may have been deleted.</p>
+  } @else if (vm.error; as error) {
+    <h1>Could not load task</h1>
+    <p class="error" role="alert">{{ error.message }}</p>
+    <button type="button" (click)="retry()">Try again</button>
+  } @else if (vm.task; as task) {
+    <h1>{{ task.title }}</h1>
+    <p class="badge">{{ task.isCompleted ? 'Completed' : 'Not completed' }}</p>
+    <p class="description">{{ task.description ?? 'No description.' }}</p>
+    <button
+      type="button"
+      class="danger"
+      [disabled]="vm.deletion.pending"
+      (click)="confirmDelete.set(true)"
+      [attr.aria-label]="'Delete task: ' + task.title"
+    >
+      <span aria-hidden="true">✕</span> Delete task
+    </button>
+    @if (confirmDelete()) {
+      <div class="confirmation" role="group" aria-label="Confirm deletion">
+        <p>Delete “{{ task.title }}”? This cannot be undone.</p>
+        <button type="button" class="danger" (click)="delete()">Confirm delete</button>
+        <button type="button" (click)="confirmDelete.set(false)">Cancel</button>
+      </div>
+    }
+    @if (vm.deletion.pending) {
+      <p role="status">Deleting task…</p>
+    }
+    @if (vm.deletion.error; as error) {
+      <p class="error" role="alert">Delete failed: {{ error.message }} Try deleting again.</p>
+    }
+  }
+}

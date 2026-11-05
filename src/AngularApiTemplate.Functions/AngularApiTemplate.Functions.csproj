@@ -1,0 +1,19 @@
+<Project Sdk="Azure.Functions.Sdk/1.0.1">
+  <ItemGroup>
+    <ProjectReference Include="../AngularApiTemplate.Application/AngularApiTemplate.Application.csproj" />
+    <ProjectReference Include="../AngularApiTemplate.Infrastructure/AngularApiTemplate.Infrastructure.csproj" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.52.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="appsettings*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="host.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="local.settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+  <!-- The Functions SDK uses a relative run directory; normalize it for root-level project launches. -->
+  <Target Name="NormalizeFunctionsRunDirectory" AfterTargets="_FunctionsComputeRunArguments">
+    <PropertyGroup>
+      <RunWorkingDirectory>$(TargetDir)</RunWorkingDirectory>
+    </PropertyGroup>
+  </Target>
+</Project>

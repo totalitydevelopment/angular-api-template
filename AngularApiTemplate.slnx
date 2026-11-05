@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AngularApiTemplate.Api/AngularApiTemplate.Api.csproj" />
+    <Project Path="src/AngularApiTemplate.Application/AngularApiTemplate.Application.csproj" />
+    <Project Path="src/AngularApiTemplate.Domain/AngularApiTemplate.Domain.csproj" />
+    <Project Path="src/AngularApiTemplate.Functions/AngularApiTemplate.Functions.csproj" />
+    <Project Path="src/AngularApiTemplate.Infrastructure/AngularApiTemplate.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AngularApiTemplate.Api.IntegrationTests/AngularApiTemplate.Api.IntegrationTests.csproj" />
+    <Project Path="tests/AngularApiTemplate.Application.Tests/AngularApiTemplate.Application.Tests.csproj" />
+    <Project Path="tests/AngularApiTemplate.Architecture.Tests/AngularApiTemplate.Architecture.Tests.csproj" />
+    <Project Path="tests/AngularApiTemplate.Domain.Tests/AngularApiTemplate.Domain.Tests.csproj" />
+    <Project Path="tests/AngularApiTemplate.Infrastructure.IntegrationTests/AngularApiTemplate.Infrastructure.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

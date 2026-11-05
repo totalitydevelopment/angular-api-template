@@ -1,0 +1,10 @@
+global using AngularApiTemplate.Application.Persistence;
+global using AngularApiTemplate.Infrastructure;
+global using AngularApiTemplate.Infrastructure.Configuration;
+global using AngularApiTemplate.Infrastructure.Persistence;
+global using Microsoft.EntityFrameworkCore;
+global using Microsoft.Extensions.Configuration;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Hosting;
+global using Microsoft.Extensions.Options;
+global using Xunit;

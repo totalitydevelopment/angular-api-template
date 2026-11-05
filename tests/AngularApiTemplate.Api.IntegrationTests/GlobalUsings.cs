@@ -1,0 +1,16 @@
+global using System.Net;
+global using System.Net.Http.Json;
+global using System.Reflection;
+global using System.Text;
+global using System.Text.Json;
+global using AngularApiTemplate.Api.Controllers.Tasks;
+global using AngularApiTemplate.Application.Tasks;
+global using AngularApiTemplate.Infrastructure.Persistence;
+global using Microsoft.AspNetCore.Authorization;
+global using Microsoft.AspNetCore.Hosting;
+global using Microsoft.AspNetCore.Mvc;
+global using Microsoft.AspNetCore.Mvc.Routing;
+global using Microsoft.AspNetCore.Mvc.Testing;
+global using Microsoft.Data.SqlClient;
+global using Microsoft.EntityFrameworkCore;
+global using Xunit;
