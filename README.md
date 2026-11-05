@@ -339,10 +339,18 @@ block bodies. Source/controller checks cover centralized imports, API contract c
 action naming and response statuses. These conventions supersede the earlier handover's
 common-import wording; docs/architecture.md remains authoritative.
 
-## Domain entity configuration
+## Domain entity configuration and reusable prompts
 
-See [entity configuration and validation ownership](docs/architecture.md#entity-configuration-and-validation-ownership)
-and the [reusable entity configuration prompt](docs/prompts/configure-domain-entity.md).
+See [entity configuration and validation ownership](docs/architecture.md#entity-configuration-and-validation-ownership).
+Reusable developer and agent prompt templates live under `docs/prompts/`:
+
+- [Implement a backend API feature](docs/prompts/implement-api-feature.md)
+- [Implement an Angular Portal feature](docs/prompts/implement-portal-feature.md)
+- [Implement a full-stack feature (API + Portal)](docs/prompts/implement-full-feature.md)
+- [Configure a domain entity](docs/prompts/configure-domain-entity.md)
+- [Configure Microsoft Entra ID authentication](docs/prompts/configure-entra-authentication.md)
+- [Independent code review and architectural audit](docs/prompts/code-review.md)
+
 TaskItemConfiguration owns storage lengths; API contracts validate HTTP input;
 TaskItem retains only business invariants and normalization.
 
