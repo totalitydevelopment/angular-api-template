@@ -101,6 +101,18 @@ from its actual Config folder; this template retains its existing Configurations
 
 For a reusable implementation prompt, see [entity configuration prompt](prompts/configure-domain-entity.md).
 
+### Aggregate boundaries, foreign keys, and child collections
+
+Decide aggregate ownership and navigation properties using bounded cardinality, true invariant protection, and separate read/write patterns:
+
+- **Foreign key + navigation property on dependents:** When an entity references shared catalogue/reference data (for example, `Business` referencing `Subscription`), expose both the foreign key (`Guid SubscriptionId`) and a nullable navigation property (`Subscription? Subscription`) on `Business`, while keeping `Subscription` free of a `BusinessId` back-reference. Domain creation and mutation methods take `SubscriptionId` directly so callers can set or change the relationship without loading the `Subscription` entity first. Read queries in Application use the `Subscription` navigation inside `.AsNoTracking()` + `.Select(...)` projections so EF Core generates a SQL `JOIN` for required columns (such as `b.Subscription!.Title`) without needing `.Include()`.
+- **No post-save reload after creation:** When creating an entity (`Business.Create(...)`), do not follow `SaveChangesAsync` with a second `.Include()` query to reload navigation properties for the response. If the use case looks up reference records before creation (for example, querying the Free Trial `Subscription` id and title, or validating submitted `Report` ids), construct the Application result directly from the in-memory entity and those pre-fetched values.
+- **Owned child collections vs. separate aggregates:** Keep a child collection on the aggregate root (for example, `IReadOnlyCollection<BusinessReport>` on `Business`, loaded with `.Include(b => b.BusinessReports)` and mutated through a domain method like `business.SetActiveReports(reportIds)`) when two conditions hold:
+  1. **Bounded, small cardinality:** The collection has a small, predictable upper bound (such as 5–20 selected report join rows per business), never an unbounded history or transaction log.
+  2. **Whole-set mutation or cross-collection invariants:** The collection is synced as a set (such as an onboarding checklist) or the parent enforces a business rule across the collection (such as plan-based report limits).
+- **Preventing a "God Aggregate":** Do not attach every tenant-related concept (`BusinessGoals`, `TeamMembers`, `XeroConnections`) as child collections on `Business`. Entities with their own independent lifecycles, screens, or unbounded growth should be separate aggregate roots linked by `BusinessId` and queried or mutated directly through their own `DbSet` on `IApplicationDbContext`. This avoids data over-fetching, false concurrency conflicts on the parent row, and `.Include()` creep.
+- **Targeted `.Include()` on writes only:** Never use `.Include()` for read-only endpoints; project with `.Select(...)`. On mutations, `.Include()` only the specific child collection that the current use case mutates (for example, include `BusinessReports` when updating the report selection, but omit it when updating the business profile).
+
 ## Contract ownership and mapping
 
 | Model | Location | Consumers |
